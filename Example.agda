@@ -220,22 +220,8 @@ module FancyElimExample where
   open Methods using (methods; eq) public
   open PreMethods public
 
-  trivial-𝕄 : Motive 0ℓ 0ℓ
-  trivial-𝕄 .Aᴹ _ = ⊤
-  trivial-𝕄 .Bᴹ _ _ = ⊤
-
-  trivial-𝕞 : Methods trivial-𝕄
-  trivial-𝕞 .methods .self   = trivial-𝕞
-  trivial-𝕞 .eq              = refl
-  trivial-𝕞 .methods .U₁ᴹ    = tt
-  trivial-𝕞 .methods .U₂ᴹ    = tt
-  trivial-𝕞 .methods .Elᴹ bᴹ = tt
-  trivial-𝕞 .methods .Zᴹ     = tt
-  trivial-𝕞 .methods .apᴹ bᴹ = tt
-
-  test : elim-B trivial-𝕄 trivial-𝕞 Z ≡ tt
-  test = refl
-
+  -- Again, a somewhat meaningless example, just to demonstrate the eliminator
+  -- works as we want.
   set-𝕄 : Motive 1ℓ 0ℓ
   set-𝕄 .Aᴹ _ = Set
   set-𝕄 .Bᴹ Aᴹ _ = Aᴹ
@@ -257,8 +243,8 @@ module FancyElimExample where
   set-𝕞 .methods .apᴹ {a = U₂}   {aᴱ = aᴹ , refl} bᴹ    = even bᴹ
   set-𝕞 .methods .apᴹ {a = El b} {aᴱ = aᴹ , refl} bᴹ    = bᴹ
         
-  test-2 : elim-B set-𝕄 set-𝕞 (ap (ap Z)) ≡ false
-  test-2 = refl 
+  test : elim-B set-𝕄 set-𝕞 (ap (ap Z)) ≡ false
+  test = refl 
 
 -- TODO: Implement a translation between the different 'Methods' (I'm not sure
 -- whether fancy 'Methods' can be translated into the earlier ones, but
