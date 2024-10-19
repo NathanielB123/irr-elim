@@ -146,7 +146,6 @@ module FancyElim {ℓ₁} {ℓ₂} (𝕄 : Motive ℓ₁ ℓ₂) where
   -- 'Aᴹ' restricted to the range of 'elim-A'
   record Aᴱ (𝕞 : Methods) (a : A) : Set (ℓ₁ ⊔ ℓ₂) where
     constructor _,_
-    inductive
     eta-equality
     field
       A-out : Aᴹ a
