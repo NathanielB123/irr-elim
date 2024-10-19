@@ -7,7 +7,7 @@ open import Data.Bool using (Bool; true; false; not) public
 open import Data.Nat using (ℕ; suc; zero) public
 open import Relation.Binary.PropositionalEquality 
   using (_≡_; refl; subst; cong; sym; dcong₂) public
-  renaming (trans to _∙_) public
+  renaming (trans to infixr 4 _∙_) public
 
 1ℓ = ℓsuc 0ℓ
 
