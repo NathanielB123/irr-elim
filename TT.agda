@@ -70,7 +70,8 @@ module IntoSetPatternMatching where
     -- useful.
     wk-ty : into-set-ty (wk {A = B} A) ≡ λ (ρ , _) → into-set-ty A ρ
     
-    sem-wk {A = A} {ρ = ρ} {t = t} = coe (sym (cong-app (wk-ty {A = A}) (ρ , t)))
+    sem-wk {A = A} {ρ = ρ} {t = t} 
+      = coe (sym (cong-app (wk-ty {A = A}) (ρ , t)))
 
     wk-ty {A = U}     = refl
     wk-ty {A = El t}  = refl
@@ -247,7 +248,7 @@ module Elim {ℓ₁ ℓ₂ ℓ₃} (𝕄 : Motive ℓ₁ ℓ₂ ℓ₃) where
                     {Bᴱ = elim-ty (𝕞 .self) B , refl}
                     (elim-tm (𝕞 .self) t))
 
--- Small utility for interpreting into 'Set'
+-- Desired behaviour for 'elim-ty ... (wk A)'
 sem-wk : ∀ {Γᴹ : Set} {Bᴹ : Γᴹ → Set}
         → (Γᴹ → Set) → Σ Γᴹ (λ ρ → Bᴹ ρ) → Set
 sem-wk Aᴹ (ρ , _) = Aᴹ ρ
