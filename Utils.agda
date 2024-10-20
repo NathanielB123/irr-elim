@@ -29,10 +29,3 @@ variable
 
 coe : ∀ {A B : Set ℓ} → A ≡ B → A → B
 coe = subst (λ x → x)
-
--- -- cong₂ : ∀ (f : A → B → C) {x y u v} → x ≡ y → u ≡ v → f x u ≡ f y v
--- -- cong₂ f refl refl = refl
-
--- cong-app : ∀ {A : Set a} {B : A → Set b} {f g : (x : A) → B x} {h →
---            f ≡ g → (x : A) → f x ≡ g x
--- cong-app refl x = refl
