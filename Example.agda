@@ -130,7 +130,7 @@ module BadElimExample where
 -- on the *range* of the eliminator is already fully defined by the equations!
 --
 -- Can we keep track of how elements produced by the eliminator are in its
--- range, and use this evidence to implement 'fooᴹ' generically?
+-- range, and use this evidence to implement something like 'fooᴹ' generically?
 module FancyElim {ℓ₁} {ℓ₂} (𝕄 : Motive ℓ₁ ℓ₂) where 
   open Motive 𝕄
 
@@ -152,10 +152,11 @@ module FancyElim {ℓ₁} {ℓ₂} (𝕄 : Motive ℓ₁ ℓ₂) where
       A-coh : elim-A 𝕞 a ≡ A-out
   open Aᴱ public
 
-  -- We will try and implement 'fooᴱ' totally on the range of 'elim-A'
+  -- We implement 'fooᴱ' totally on the range of 'elim-A' by just re-eliminating
   fooᴱ : ∀ 𝕞 → Aᴱ 𝕞 a → Aᴱ 𝕞 (foo a)
+  fooᴱ {a = a} 𝕞 (aᴹ , p) = elim-A 𝕞 (foo a) , refl
 
-  -- Note that as 'fooᴱ' will rely on calling on the eliminator, the 'Methods'
+  -- Note that as 'fooᴱ' relues on calling on the eliminator, the 'Methods'
   -- needs to be able to have a forward reference to itself. Luckily, this is 
   -- actually possible with coinduction!
   record PreMethods : Set (ℓ₁ ⊔ ℓ₂) where
@@ -182,7 +183,6 @@ module FancyElim {ℓ₁} {ℓ₂} (𝕄 : Motive ℓ₁ ℓ₂) where
   open Methods
   methods-fwd 𝕞 = 𝕞 .methods
 
-  fooᴱ {a = a} 𝕞 (aᴹ , p) = elim-A 𝕞 (foo a) , refl
 
   -- TODO: Can we craft a version that doesn't require UIP?
   uip : ∀ {a} {A : Set a} {x y : A} {p q : x ≡ y} → p ≡ q
@@ -197,19 +197,17 @@ module FancyElim {ℓ₁} {ℓ₂} (𝕄 : Motive ℓ₁ ℓ₂) where
 
   -- And finally our fancy eliminator!
   elim-B 𝕞 Z      = 𝕞 .Zᴹ
-  -- We need to inline 'foo' here to satisfy Agda's termination checker...
+  -- We need to inline the 'foo a' call here to satisfy Agda's termination 
+  -- checker...
   -- elim-B 𝕞 (ap {a = a} b) 
   --   = subst (λ m → Bᴹ (elim-A m (foo a)) _) 𝕞-ext
-  --           (𝕞 .apᴹ {aᴱ = aᴱ} (elim-B (𝕞 .self) b))
-  --    where aᴱ = elim-A (𝕞 .self) a , refl
+  --           (𝕞 .apᴹ {aᴱ = elim-A (𝕞 .self) a , refl} (elim-B (𝕞 .self) b))
   elim-B 𝕞 (ap {a = a@U₁} b) 
     = subst (λ m → Bᴹ (elim-A m U₂) (ap b)) (𝕞-ext {𝕞 = 𝕞})
-            (𝕞 .apᴹ {aᴱ = aᴱ} (elim-B (𝕞 .self) b))
-      where aᴱ = elim-A (𝕞 .self) a , refl
+            (𝕞 .apᴹ {aᴱ = elim-A (𝕞 .self) a , refl} (elim-B (𝕞 .self) b))
   elim-B 𝕞 (ap {a = a@U₂} b) 
     = subst (λ m → Bᴹ (elim-A m U₁) (ap b)) (𝕞-ext {𝕞 = 𝕞})
-            (𝕞 .apᴹ {aᴱ = aᴱ} (elim-B (𝕞 .self) b))
-      where aᴱ = elim-A (𝕞 .self) a , refl
+            (𝕞 .apᴹ {aᴱ = elim-A (𝕞 .self) a , refl} (elim-B (𝕞 .self) b))
   elim-B 𝕞 (ap {a = a@(El _)} b) 
     = subst (λ m → Bᴹ (elim-A m a) (ap b)) (𝕞-ext {𝕞 = 𝕞})
             (𝕞 .apᴹ {aᴱ = elim-A (𝕞 .self) a , refl} (elim-B (𝕞 .self) b))
@@ -236,8 +234,8 @@ module FancyElimExample where
   set-𝕞 .methods .Elᴹ true  = ⊤
   set-𝕞 .methods .Zᴹ = false
   -- Our evidence that 'aᴹ' is in the range of 'elim-A' is sufficient to tell
-  -- us that bᴹ here is indeed a boolean. We can match on our previous result
-  -- and have the 'apᴹ' case do real computation!
+  -- us that bᴹ here is indeed a boolean. We can match on our intermediate 
+  -- results and have the 'apᴹ' case do real computation!
   set-𝕞 .methods .apᴹ {a = U₁}   {aᴱ = aᴹ , refl} false = 1
   set-𝕞 .methods .apᴹ {a = U₁}   {aᴱ = aᴹ , refl} true  = 0
   set-𝕞 .methods .apᴹ {a = U₂}   {aᴱ = aᴹ , refl} bᴹ    = even bᴹ
