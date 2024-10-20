@@ -6,7 +6,7 @@ open import Utils
 -- An IIR fragment of a type theory syntax (thanks to Ambrus Kaposi for
 -- suggesting this example)
 
--- WIP (there are some termination errors...)
+-- WIP (I have asserted termination when using the eliminator)
 module TT where
 
 data Con : Set
@@ -56,85 +56,34 @@ module IntoSetPatternMatching where
     into-set-ty (El t)  ρ = large-elim (into-set-tm t ρ)
     into-set-ty (A ⇒ B) ρ = into-set-ty A ρ → into-set-ty B ρ
     
-    sem-wk : ∀ {ρ t} → into-set-ty A ρ → into-set-ty (wk {A = B} A) (ρ , t)
+    wk-coe : ∀ {ρ t} → into-set-ty A ρ → into-set-ty (wk {A = B} A) (ρ , t)
   
-    -- We hit termination issues here. The main problematic calls appear to
-    -- be these 'into-set-tm' cases and the 'El t' case of 'into-set-ty'
-    {-# TERMINATING #-}
-    into-set-tm (vz {A = A})   (ρ , t) = sem-wk {A = A} t
-    into-set-tm (vs {A = A} t) (ρ , u) = sem-wk {A = A} (into-set-tm t ρ)
+    into-set-tm (vz {A = A})   (ρ , t) = wk-coe {A = A} t
+    into-set-tm (vs {A = A} t) (ρ , u) = wk-coe {A = A} (into-set-tm t ρ)
 
-    -- We also need a mutual lemma about the semantics of 'wk'. This is
-    -- probably a place where the flexibility to define our own interpretation
-    -- of weakening before proving it satisfies the desired laws would be 
-    -- useful.
     wk-ty : into-set-ty (wk {A = B} A) ≡ λ (ρ , _) → into-set-ty A ρ
     
-    sem-wk {A = A} {ρ = ρ} {t = t} 
-      = coe (sym (cong-app (wk-ty {A = A}) (ρ , t)))
+    -- Thanks to Szumi Xie for suggesting writing specific helpers to implement
+    -- 'wk-coe'/'wk-ty' instead of generic 'coe'/'cong-app'/'cong₂', to avoid
+    -- termination errors
+    wk-coe-helper : ∀ {X ρ} → into-set-ty (wk {A = B} A) ≡ X
+                  → X ρ → into-set-ty (wk {A = B} A) ρ
+
+    wk-coe {A = A} {ρ = ρ} {t = t} = wk-coe-helper {A = A} (wk-ty {A = A})
+
+    wk-coe-helper refl x = x
+
+    wk-ty-⇒-helper : ∀ {X Y} →
+      into-set-ty (wk {A = C} A) ≡ X →
+      into-set-ty (wk {A = C} B) ≡ Y →
+      (λ ρ → into-set-ty (wk {A = C} A) ρ → into-set-ty (wk {A = C} B) ρ) ≡
+      (λ ρ → X ρ → Y ρ)
+    wk-ty-⇒-helper refl refl = refl
 
     wk-ty {A = U}     = refl
     wk-ty {A = El t}  = refl
     wk-ty {B = C} {A = A ⇒ B} 
-      = cong₂ (λ A B → λ ρ → A ρ → B ρ) (wk-ty {A = A}) (wk-ty {A = B})
-
--- I first assumed the issue with termination here was due to Agda not knowing
--- 'wk A' sort-of preserves the size of the 'Ty'pe. Therefore, I also tried
--- recursing on 'Spine's
-
-data Spine : Set where
-  end : Spine
-  _⇒_ : Spine → Spine → Spine
-
-spine : Ty Γ → Spine
-spine U       = end
-spine (El _)  = end
-spine (A ⇒ B) = spine A ⇒ spine B
-
-spine-wk : spine (wk {A = B} A) ≡ spine A
-spine-wk {A = U}     = refl
-spine-wk {A = El t}  = refl
-spine-wk {A = A ⇒ B} = cong₂ _⇒_ spine-wk spine-wk
-
-{-# REWRITE spine-wk #-}
-
-variable
-  sA sB sC sD : Spine
-
-module IntoSetSpines where
-  into-set-con : Con → Set
-  into-set-ty  : ∀ (A : Ty Γ) sA → sA ≡ spine A → into-set-con Γ → Set
-  into-set-tm  : Tm Γ A → ∀ sA p → ∀ ρ → into-set-ty A sA p ρ 
-
-  into-set-con •       = ⊤
-  into-set-con (Γ ▷ A) = ∃ λ ρ → into-set-ty A (spine A) refl ρ
-
-  into-set-ty U       end       refl ρ = Bool
-  into-set-ty (El t)  end       refl ρ = large-elim (into-set-tm t end refl ρ)
-  into-set-ty (A ⇒ B) (sA ⇒ sB) refl ρ 
-    = into-set-ty A sA refl ρ → into-set-ty B sB refl ρ
-  
-  sem-wk : ∀ {ρ t} sA p → into-set-ty A sA p ρ 
-          → into-set-ty (wk {A = B} A) sA p (ρ , t)
-
-  -- Unfortunately, we hit essentially the same termination issues...
-  {-# TERMINATING #-}
-  into-set-tm (vz {A = A})   sA refl (ρ , t) 
-    = sem-wk {A = A} sA refl t
-  into-set-tm (vs {A = A} t) sA refl (ρ , u) 
-    = sem-wk {A = A} sA refl (into-set-tm t sA refl ρ)
-
-  wk-ty : ∀ sA p → into-set-ty (wk {A = B} A) sA p 
-                  ≡ λ (ρ , _) → into-set-ty A sA p ρ
-  
-  sem-wk {A = A} {ρ = ρ} {t = t} sA p 
-    = coe (sym (cong-app (wk-ty {A = A} sA p) (ρ , t)))
-
-  wk-ty {A = U}             end       refl = refl
-  wk-ty {A = El t}          end       refl = refl
-  wk-ty {B = C} {A = A ⇒ B} (sA ⇒ sB) refl
-    = cong₂ (λ A B → λ ρ → A ρ → B ρ) 
-            (wk-ty {A = A} sA refl) (wk-ty {A = B} sB refl)
+      = wk-ty-⇒-helper {A = A} {B = B} (wk-ty {A = A}) (wk-ty {A = B})
 
 -- The reason I started with examples of pattern-matching on the syntax is that 
 -- (spoilers) we will hit seemingly the exact same termination issues when
@@ -176,7 +125,7 @@ module Elim {ℓ₁ ℓ₂ ℓ₃} (𝕄 : Motive ℓ₁ ℓ₂ ℓ₃) where
   open Tyᴱ
 
   variable
-    𝕞 : Methods
+    𝕞 𝕞₁ 𝕞₂ : Methods
     Γᴱ Δᴱ Θᴱ Ξᴱ : Conᴱ 𝕞 Γ
     Aᴱ Bᴱ Cᴱ Dᴱ : Tyᴱ 𝕞 Γᴱ A
 
@@ -233,20 +182,21 @@ module Elim {ℓ₁ ℓ₂ ℓ₃} (𝕄 : Motive ℓ₁ ℓ₂ ℓ₃) where
   elim-ty 𝕞 (El t)  = 𝕞 .Elᴹ (elim-tm 𝕞 t)
   elim-ty 𝕞 (A ⇒ B) = 𝕞 ._⇒ᴹ_ (elim-ty 𝕞 A) (elim-ty 𝕞 B)
 
-  -- Sure enough, we hit the same termination issues
-  -- I also tried recursing on 'Spine's here and as to be expected, it doesn't
-  -- really help here either (see 'TT-SpineElim.agda')
-  {-# TERMINATING #-}
+  coe-methods-tm : 𝕞₁ ≡ 𝕞₂ 
+                 → Tmᴹ (𝕞₁ ._▷ᴹ_ (elim-con 𝕞₁ Γ) (elim-ty 𝕞₁ B))
+                       (elim-ty 𝕞₁ (wk A)) t 
+                 → Tmᴹ (𝕞₂ ._▷ᴹ_ (elim-con 𝕞₂ Γ) (elim-ty 𝕞₂ B)) 
+                       (elim-ty 𝕞₂ (wk A)) t
+  coe-methods-tm refl x = x
+
   elim-tm 𝕞 (vz {Γ = Γ} {A = A}) 
-    = subst (λ m → Tmᴹ _ (elim-ty m (wk A)) vz) (𝕞-ext 𝕞) 
-            (𝕞 .vzᴹ {Γᴱ = elim-con (𝕞 .self) Γ , refl} 
-                    {Aᴱ = elim-ty (𝕞 .self) A , refl})
+    = coe-methods-tm (𝕞-ext 𝕞) (𝕞 .vzᴹ {Γᴱ = elim-con (𝕞 .self) Γ , refl} 
+                                       {Aᴱ = elim-ty (𝕞 .self) A , refl})
   elim-tm 𝕞 (vs {Γ = Γ} {A = A} {B = B} t) 
-    = subst (λ m → Tmᴹ _ (elim-ty m (wk A)) (vs t)) (𝕞-ext 𝕞) 
-            (𝕞 .vsᴹ {Γᴱ = elim-con (𝕞 .self) Γ , refl}
-                    {Aᴱ = elim-ty (𝕞 .self) A , refl}
-                    {Bᴱ = elim-ty (𝕞 .self) B , refl}
-                    (elim-tm (𝕞 .self) t))
+    = coe-methods-tm (𝕞-ext 𝕞) (𝕞 .vsᴹ {Γᴱ = elim-con (𝕞 .self) Γ , refl}
+                                       {Aᴱ = elim-ty (𝕞 .self) A , refl}
+                                       {Bᴱ = elim-ty (𝕞 .self) B , refl}
+                                       (elim-tm (𝕞 .self) t))
 
 -- Desired behaviour for 'elim-ty ... (wk A)'
 sem-wk : ∀ {Γᴹ : Set} {Bᴹ : Γᴹ → Set}
@@ -271,6 +221,25 @@ module WithElim where
   wk-ty : elim-ty set-𝕄 set-𝕞 (wk {A = B} A)
         ≅ sem-wk {Bᴹ = elim-ty set-𝕄 set-𝕞 B} (elim-ty set-𝕄 set-𝕞 A) 
   
+  wk-coe-helper : ∀ {X ρ} 
+                → elim-ty set-𝕄 set-𝕞 (wk {A = B} A) ≡ X
+                → X ρ → elim-ty set-𝕄 set-𝕞 (wk {A = B} A) ρ
+  wk-coe-helper refl x = x
+
+  -- Version of 'wk-coe-helper' that takes a '≅' just in case that assists 
+  -- with termination
+  wk-coe-helper≅ : ∀ {B : Ty Γ} 
+                    {X : set-𝕞 .methods ._▷ᴹ_ (elim-con set-𝕄 set-𝕞 Γ) 
+                                              (elim-ty set-𝕄 set-𝕞 B) → Set}
+                    {ρ} 
+                → elim-ty set-𝕄 set-𝕞 (wk {A = B} A) ≅ X
+                → X ρ → elim-ty set-𝕄 set-𝕞 (wk {A = B} A) ρ
+  wk-coe-helper≅ refl x = x
+
+  -- I can't figure out how to avoid asserting termination here. Unfortunately,
+  -- Szumi's trick of writing a concrete coerce function doesn't appear to be
+  -- enough
+  {-# TERMINATING #-}
   set-𝕞 .methods .self = set-𝕞 
   set-𝕞 .eq            = refl
   
@@ -285,11 +254,13 @@ module WithElim where
     = λ ρ → Aᴹ ρ → Bᴹ ρ
 
   
-  set-𝕞 .methods .vzᴹ {A = A} (ρ , t)
-    = coe (sym (cong-app (≅-to-≡ (wk-ty {B = A} {A = A})) (ρ , t))) t
+  set-𝕞 .methods .vzᴹ {A = A} (ρ , t) 
+    = wk-coe-helper {A = A} (≅-to-≡ (wk-ty {B = A} {A = A})) t
+    -- = coe (sym (cong-app (≅-to-≡ (wk-ty {B = A} {A = A})) (ρ , t))) t
   set-𝕞 .methods .vsᴹ {A = A} {B = B} {Γᴱ = _ , refl} {Aᴱ = _ , refl} 
                       tᴹ (ρ , u) 
-    = coe (sym (cong-app (≅-to-≡ (wk-ty {B = B} {A = A})) (ρ , u))) (tᴹ ρ)
+    = wk-coe-helper {A = A} (≅-to-≡ (wk-ty {B = B} {A = A})) (tᴹ ρ)
+    -- = coe (sym (cong-app (≅-to-≡ (wk-ty {B = B} {A = A})) (ρ , u))) (tᴹ ρ)
 
   wk-ty-𝕄 : Motive 0ℓ 1ℓ 0ℓ
   wk-ty-𝕄 .Conᴹ Γ     = ⊤
@@ -300,12 +271,6 @@ module WithElim where
 
   wk-ty-𝕞 : Methods wk-ty-𝕄
   
-  -- We need to assert termination when *using* the eliminator as well sadly...
-  -- I think we might have a better shot with a single eliminator that
-  -- simultaneously interprets into 'Set' and proves the 'wk-ty' lemma, but
-  -- this seems quite tricky because the 'Motive' here would seemingly
-  -- need to refer to elimination using itself
-  {-# TERMINATING #-}
   wk-ty {B = B} {A = A} = ≡-to-≅ (elim-ty wk-ty-𝕄 wk-ty-𝕞 A B)
   
   wk-ty-𝕞 .methods .self = wk-ty-𝕞
