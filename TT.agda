@@ -85,11 +85,7 @@ module IntoSetPatternMatching where
     wk-ty {B = C} {A = A ⇒ B} 
       = wk-ty-⇒-helper {A = A} {B = B} (wk-ty {A = A}) (wk-ty {A = B})
 
--- The reason I started with examples of pattern-matching on the syntax is that 
--- (spoilers) we will hit seemingly the exact same termination issues when
--- defining the general eliminator
 
--- Let's give it a shot anyway
 record Motive (ℓ₁ ℓ₂ ℓ₃ : Level) : Set (ℓsuc (ℓ₁ ⊔ ℓ₂ ⊔ ℓ₃)) where
   field
     Conᴹ : Con → Set ℓ₁
@@ -203,8 +199,7 @@ sem-wk : ∀ {Γᴹ : Set} {Bᴹ : Γᴹ → Set}
         → (Γᴹ → Set) → Σ Γᴹ (λ ρ → Bᴹ ρ) → Set
 sem-wk Aᴹ (ρ , _) = Aᴹ ρ
 
--- After asserting termination, can we at least use the eliminator to interpret
--- into 'Set'?
+
 module WithElim where
   open Elim
   open Motive
@@ -236,7 +231,7 @@ module WithElim where
                 → X ρ → elim-ty set-𝕄 set-𝕞 (wk {A = B} A) ρ
   wk-coe-helper≅ refl x = x
 
-  -- I can't figure out how to avoid asserting termination here. Unfortunately,
+  -- I don't know how to avoid asserting termination here. Unfortunately,
   -- Szumi's trick of writing a concrete coerce function doesn't appear to be
   -- enough
   {-# TERMINATING #-}
