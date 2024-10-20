@@ -1,8 +1,9 @@
-{-# OPTIONS --guardedness #-}
+{-# OPTIONS --guardedness --rewriting #-}
 
+import Agda.Builtin.Equality.Rewrite
 open import Utils
 
--- A very simple IIR syntax of type theory (thanks to Ambrus Kaposi for
+-- An IIR fragment of a type theory syntax (thanks to Ambrus Kaposi for
 -- suggesting this example)
 
 -- WIP (there are some termination errors...)
@@ -36,6 +37,109 @@ wk U       = U
 wk (El a)  = El (vs a)
 wk (A ⇒ B) = wk A ⇒ wk B
 
+large-elim : Bool → Set
+large-elim true  = ⊤
+large-elim false = ⊥
+
+-- First we try to eliminate into 'Set' with pattern matching
+-- This was a bit trickier than I expected...
+
+module IntoSetPatternMatching where
+    into-set-con : Con → Set
+    into-set-ty  : Ty Γ → into-set-con Γ → Set
+    into-set-tm  : Tm Γ A → ∀ ρ → into-set-ty A ρ
+
+    into-set-con •       = ⊤
+    into-set-con (Γ ▷ A) = ∃ λ ρ → into-set-ty A ρ
+
+    into-set-ty U       ρ = Bool
+    into-set-ty (El t)  ρ = large-elim (into-set-tm t ρ)
+    into-set-ty (A ⇒ B) ρ = into-set-ty A ρ → into-set-ty B ρ
+    
+    sem-wk : ∀ {ρ t} → into-set-ty A ρ → into-set-ty (wk {A = B} A) (ρ , t)
+  
+    -- We hit termination issues here. The main problematic calls appear to
+    -- be these 'into-set-tm' cases and the 'El t' case of 'into-set-ty'
+    {-# TERMINATING #-}
+    into-set-tm (vz {A = A})   (ρ , t) = sem-wk {A = A} t
+    into-set-tm (vs {A = A} t) (ρ , u) = sem-wk {A = A} (into-set-tm t ρ)
+
+    -- We also need a mutual lemma about the semantics of 'wk'. This is
+    -- probably a place where the flexibility to define our own interpretation
+    -- of weakening before proving it satisfies the desired laws would be 
+    -- useful.
+    wk-ty : into-set-ty (wk {A = B} A) ≡ λ (ρ , _) → into-set-ty A ρ
+    
+    sem-wk {A = A} {ρ = ρ} {t = t} = coe (sym (cong-app (wk-ty {A = A}) (ρ , t)))
+
+    wk-ty {A = U}     = refl
+    wk-ty {A = El t}  = refl
+    wk-ty {B = C} {A = A ⇒ B} 
+      = cong₂ (λ A B → λ ρ → A ρ → B ρ) (wk-ty {A = A}) (wk-ty {A = B})
+
+-- I first assumed the issue with termination here was due to Agda not knowing
+-- 'wk A' sort-of preserves the size of the 'Ty'pe. Therefore, I also tried
+-- recursing on 'Spine's
+
+data Spine : Set where
+  end : Spine
+  _⇒_ : Spine → Spine → Spine
+
+spine : Ty Γ → Spine
+spine U       = end
+spine (El _)  = end
+spine (A ⇒ B) = spine A ⇒ spine B
+
+spine-wk : spine (wk {A = B} A) ≡ spine A
+spine-wk {A = U}     = refl
+spine-wk {A = El t}  = refl
+spine-wk {A = A ⇒ B} = cong₂ _⇒_ spine-wk spine-wk
+
+{-# REWRITE spine-wk #-}
+
+variable
+  sA sB sC sD : Spine
+
+module IntoSetSpines where
+  into-set-con : Con → Set
+  into-set-ty  : ∀ (A : Ty Γ) sA → sA ≡ spine A → into-set-con Γ → Set
+  into-set-tm  : Tm Γ A → ∀ sA p → ∀ ρ → into-set-ty A sA p ρ 
+
+  into-set-con •       = ⊤
+  into-set-con (Γ ▷ A) = ∃ λ ρ → into-set-ty A (spine A) refl ρ
+
+  into-set-ty U       end       refl ρ = Bool
+  into-set-ty (El t)  end       refl ρ = large-elim (into-set-tm t end refl ρ)
+  into-set-ty (A ⇒ B) (sA ⇒ sB) refl ρ 
+    = into-set-ty A sA refl ρ → into-set-ty B sB refl ρ
+  
+  sem-wk : ∀ {ρ t} sA p → into-set-ty A sA p ρ 
+          → into-set-ty (wk {A = B} A) sA p (ρ , t)
+
+  -- Unfortunately, we hit essentially the same termination issues...
+  {-# TERMINATING #-}
+  into-set-tm (vz {A = A})   sA refl (ρ , t) 
+    = sem-wk {A = A} sA refl t
+  into-set-tm (vs {A = A} t) sA refl (ρ , u) 
+    = sem-wk {A = A} sA refl (into-set-tm t sA refl ρ)
+
+  wk-ty : ∀ sA p → into-set-ty (wk {A = B} A) sA p 
+                  ≡ λ (ρ , _) → into-set-ty A sA p ρ
+  
+  sem-wk {A = A} {ρ = ρ} {t = t} sA p 
+    = coe (sym (cong-app (wk-ty {A = A} sA p) (ρ , t)))
+
+  wk-ty {A = U}             end       refl = refl
+  wk-ty {A = El t}          end       refl = refl
+  wk-ty {B = C} {A = A ⇒ B} (sA ⇒ sB) refl
+    = cong₂ (λ A B → λ ρ → A ρ → B ρ) 
+            (wk-ty {A = A} sA refl) (wk-ty {A = B} sB refl)
+
+-- The reason I started with examples of pattern-matching on the syntax is that 
+-- (spoilers) we will hit seemingly the exact same termination issues when
+-- defining the general eliminator
+
+-- Let's give it a shot anyway
 record Motive (ℓ₁ ℓ₂ ℓ₃ : Level) : Set (ℓsuc (ℓ₁ ⊔ ℓ₂ ⊔ ℓ₃)) where
   field
     Conᴹ : Con → Set ℓ₁
@@ -128,6 +232,9 @@ module Elim {ℓ₁ ℓ₂ ℓ₃} (𝕄 : Motive ℓ₁ ℓ₂ ℓ₃) where
   elim-ty 𝕞 (El t)  = 𝕞 .Elᴹ (elim-tm 𝕞 t)
   elim-ty 𝕞 (A ⇒ B) = 𝕞 ._⇒ᴹ_ (elim-ty 𝕞 A) (elim-ty 𝕞 B)
 
+  -- Sure enough, we hit the same termination issues
+  -- I also tried recursing on 'Spine's here and as to be expected, it doesn't
+  -- really help here either (see 'TT-SpineElim.agda')
   {-# TERMINATING #-}
   elim-tm 𝕞 (vz {Γ = Γ} {A = A}) 
     = subst (λ m → Tmᴹ _ (elim-ty m (wk A)) vz) (𝕞-ext 𝕞) 
@@ -140,117 +247,76 @@ module Elim {ℓ₁ ℓ₂ ℓ₃} (𝕄 : Motive ℓ₁ ℓ₂ ℓ₃) where
                     {Bᴱ = elim-ty (𝕞 .self) B , refl}
                     (elim-tm (𝕞 .self) t))
 
-module Test where
+-- Small utility for interpreting into 'Set'
+sem-wk : ∀ {Γᴹ : Set} {Bᴹ : Γᴹ → Set}
+        → (Γᴹ → Set) → Σ Γᴹ (λ ρ → Bᴹ ρ) → Set
+sem-wk Aᴹ (ρ , _) = Aᴹ ρ
+
+-- After asserting termination, can we at least use the eliminator to interpret
+-- into 'Set'?
+module WithElim where
   open Elim
   open Motive
   open Methods
   open PreMethods
 
-  large-elim : Bool → Set
-  large-elim false = ⊥
-  large-elim true  = ⊤
+  set-𝕄 : Motive 1ℓ 1ℓ 0ℓ
+  set-𝕞 : Methods set-𝕄
 
-  -- First we demonstrate elimination into 'Set' with pattern matching
-  -- This ended a bit trickier than I expected...
-  module IntoSet where
-    into-set-con : Con → Set
-    into-set-ty  : Ty Γ → into-set-con Γ → Set
-    into-set-tm  : Tm Γ A → ∀ ρ → into-set-ty A ρ
+  set-𝕄 .Conᴹ Γ       = Set
+  set-𝕄 .Tyᴹ  Γᴹ A    = Γᴹ → Set
+  set-𝕄 .Tmᴹ  Γᴹ Aᴹ t = ∀ ρ → Aᴹ ρ
 
-    into-set-con •       = ⊤
-    into-set-con (Γ ▷ A) = ∃ λ ρ → into-set-ty A ρ
-
-    into-set-ty U       ρ = Bool
-    into-set-ty (El t)  ρ = large-elim (into-set-tm t ρ)
-    into-set-ty (A ⇒ B) ρ = into-set-ty A ρ → into-set-ty B ρ
-    
-    sem-wk : ∀ {ρ t} → into-set-ty A ρ → into-set-ty (wk {A = B} A) (ρ , t)
+  wk-ty : elim-ty set-𝕄 set-𝕞 (wk {A = B} A)
+        ≅ sem-wk {Bᴹ = elim-ty set-𝕄 set-𝕞 B} (elim-ty set-𝕄 set-𝕞 A) 
   
-    into-set-tm (vz {A = A})   (ρ , t) = sem-wk {A = A} t
-    into-set-tm (vs {A = A} t) (ρ , u) = sem-wk {A = A} (into-set-tm t ρ)
-
-    wk-ty : into-set-ty (wk {A = B} A) ≡ λ (ρ , _) → into-set-ty A ρ
-    
-    sem-wk {A = A} {ρ = ρ} {t = t} = coe (sym (cong-app (wk-ty {A = A}) (ρ , t)))
-
-    -- I don't even know how to elimate this IIR type into 'Set' without
-    -- asserting termination...
-    {-# TERMINATING #-}
-    wk-ty {A = U}     = refl
-    wk-ty {A = El t}  = refl
-    wk-ty {B = C} {A = A ⇒ B} 
-      = cong₂ (λ A B → λ ρ → A ρ → B ρ) (wk-ty {A = A}) (wk-ty {A = B})
+  set-𝕞 .methods .self = set-𝕞 
+  set-𝕞 .eq            = refl
   
-  -- Idea: Can we recover structural recursion by computing elim of 'wk A' and 
-  -- the relevant proof simultaneously with elim on types?
-  -- I'd like to get a stronger idea of what is actually causing the termination
-  -- errors here...
-  -- The annoying thing is that 'sem-wk' really cannot get around needing
-  -- to returns something indexed with 'into-set-ty (wk {A = B} A) (ρ , t)', 
-  -- which appears to be considered like an actual function call for termination
-  -- checking (which probably makes sense honestly...)
+  set-𝕞 .methods .•ᴹ         = ⊤
+  set-𝕞 .methods ._▷ᴹ_ Γᴹ Aᴹ = ∃ λ ρ → Aᴹ ρ
 
-  -- Now we try to do the same thing with the eliminator
-  module WithElim where
-    set-𝕄 : Motive 1ℓ 1ℓ 0ℓ
-    set-𝕞 : Methods set-𝕄
+  set-𝕞 .methods .Uᴹ  
+    = λ _ → Bool       
+  set-𝕞 .methods .Elᴹ tᴹ
+    = λ ρ → large-elim (tᴹ ρ)
+  set-𝕞 .methods ._⇒ᴹ_ Aᴹ Bᴹ 
+    = λ ρ → Aᴹ ρ → Bᴹ ρ
 
-    set-𝕄 .Conᴹ Γ       = Set
-    set-𝕄 .Tyᴹ  Γᴹ A = Γᴹ → Set
-    set-𝕄 .Tmᴹ  Γᴹ Aᴹ t = ∀ ρ → Aᴹ ρ
-
-    sem-wk : ∀ {Γᴹ : Set} {Bᴹ : Γᴹ → Set}
-           → (Γᴹ → Set) → Σ Γᴹ (λ ρ → Bᴹ ρ) → Set
-    sem-wk Aᴹ (ρ , _) = Aᴹ ρ
-
-    wk-ty : elim-ty set-𝕄 set-𝕞 (wk {A = B} A)
-          ≅ sem-wk {Bᴹ = elim-ty set-𝕄 set-𝕞 B} (elim-ty set-𝕄 set-𝕞 A) 
-    
-    set-𝕞 .methods .self = set-𝕞 
-    set-𝕞 .eq            = refl
-    
-    set-𝕞 .methods .•ᴹ         = ⊤
-    set-𝕞 .methods ._▷ᴹ_ Γᴹ Aᴹ = ∃ λ ρ → Aᴹ ρ
-
-    set-𝕞 .methods .Uᴹ  
-      = λ _ → Bool       
-    set-𝕞 .methods .Elᴹ tᴹ
-      = λ ρ → large-elim (tᴹ ρ)
-    set-𝕞 .methods ._⇒ᴹ_ Aᴹ Bᴹ 
-      = λ ρ → Aᴹ ρ → Bᴹ ρ
-
-    set-𝕞 .methods .vzᴹ {A = A} (ρ , t)
-      = coe (sym (cong-app (≅-to-≡ (wk-ty {B = A} {A = A})) (ρ , t))) t
-    set-𝕞 .methods .vsᴹ {A = A} {B = B} {Γᴱ = _ , refl} {Aᴱ = _ , refl} 
-                        tᴹ (ρ , u) 
-      = coe (sym (cong-app (≅-to-≡ (wk-ty {B = B} {A = A})) (ρ , u))) (tᴹ ρ)
   
-    wk-ty-𝕄 : Motive 0ℓ 1ℓ 0ℓ
-    wk-ty-𝕄 .Conᴹ Γ     = ⊤
-    wk-ty-𝕄 .Tyᴹ  Γᴹ A 
-      = ∀ B → elim-ty set-𝕄 set-𝕞 (wk {A = B} A)
-      ≡ sem-wk {Bᴹ = elim-ty set-𝕄 set-𝕞 B} (elim-ty set-𝕄 set-𝕞 A) 
-    wk-ty-𝕄 .Tmᴹ Γᴹ Aᴹ t = ⊤
+  set-𝕞 .methods .vzᴹ {A = A} (ρ , t)
+    = coe (sym (cong-app (≅-to-≡ (wk-ty {B = A} {A = A})) (ρ , t))) t
+  set-𝕞 .methods .vsᴹ {A = A} {B = B} {Γᴱ = _ , refl} {Aᴱ = _ , refl} 
+                      tᴹ (ρ , u) 
+    = coe (sym (cong-app (≅-to-≡ (wk-ty {B = B} {A = A})) (ρ , u))) (tᴹ ρ)
 
-    wk-ty-𝕞 : Methods wk-ty-𝕄
-    
-    -- We need to assert termination here as well...
-    -- Maybe this is to be expected given mutual eliminators like this really
-    -- ought to be combined together - but doing this here is a bit tricky
-    -- because the 'Motive' ('wk-ty-𝕄') relies on '_▷ᴹ_' reducing.
-    {-# TERMINATING #-}
-    wk-ty {B = B} {A = A} = ≡-to-≅ (elim-ty wk-ty-𝕄 wk-ty-𝕞 A B)
-    
-    wk-ty-𝕞 .methods .self = wk-ty-𝕞
-    wk-ty-𝕞 .eq            = refl
+  wk-ty-𝕄 : Motive 0ℓ 1ℓ 0ℓ
+  wk-ty-𝕄 .Conᴹ Γ     = ⊤
+  wk-ty-𝕄 .Tyᴹ  Γᴹ A 
+    = ∀ B → elim-ty set-𝕄 set-𝕞 (wk {A = B} A)
+    ≡ sem-wk {Bᴹ = elim-ty set-𝕄 set-𝕞 B} (elim-ty set-𝕄 set-𝕞 A) 
+  wk-ty-𝕄 .Tmᴹ Γᴹ Aᴹ t = ⊤
 
-    wk-ty-𝕞 .methods .•ᴹ       = tt
-    wk-ty-𝕞 .methods ._▷ᴹ_ Γᴹ Aᴹ = tt
+  wk-ty-𝕞 : Methods wk-ty-𝕄
+  
+  -- We need to assert termination when *using* the eliminator as well sadly...
+  -- I think we might have a better shot with a single eliminator that
+  -- simultaneously interprets into 'Set' and proves the 'wk-ty' lemma, but
+  -- this seems quite tricky because the 'Motive' here would seemingly
+  -- need to refer to elimination using itself
+  {-# TERMINATING #-}
+  wk-ty {B = B} {A = A} = ≡-to-≅ (elim-ty wk-ty-𝕄 wk-ty-𝕞 A B)
+  
+  wk-ty-𝕞 .methods .self = wk-ty-𝕞
+  wk-ty-𝕞 .eq            = refl
 
-    wk-ty-𝕞 .methods .Uᴹ         B = refl
-    wk-ty-𝕞 .methods .Elᴹ tᴹ     B = refl
-    wk-ty-𝕞 .methods ._⇒ᴹ_ Aᴹ Bᴹ C 
-      = cong₂ (λ A B → λ ρ → A ρ → B ρ) (Aᴹ C) (Bᴹ C)
+  wk-ty-𝕞 .methods .•ᴹ       = tt
+  wk-ty-𝕞 .methods ._▷ᴹ_ Γᴹ Aᴹ = tt
 
-    wk-ty-𝕞 .methods .vzᴹ    = tt
-    wk-ty-𝕞 .methods .vsᴹ tᴹ = tt
+  wk-ty-𝕞 .methods .Uᴹ         B = refl
+  wk-ty-𝕞 .methods .Elᴹ tᴹ     B = refl
+  wk-ty-𝕞 .methods ._⇒ᴹ_ Aᴹ Bᴹ C 
+    = cong₂ (λ A B → λ ρ → A ρ → B ρ) (Aᴹ C) (Bᴹ C)
+
+  wk-ty-𝕞 .methods .vzᴹ    = tt
+  wk-ty-𝕞 .methods .vsᴹ tᴹ = tt
