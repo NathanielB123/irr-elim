@@ -63,7 +63,7 @@ module IntoSetPatternMatching where
 
     wk-ty : into-set-ty (wk {A = B} A) ≡ λ (ρ , _) → into-set-ty A ρ
     
-    -- Thanks to Szumi Xie for suggesting writing specific helpers to implement
+    -- Thanks to Szumi Xie for suggesting writing specific helpers for
     -- 'wk-coe'/'wk-ty' instead of generic 'coe'/'cong-app'/'cong₂', to avoid
     -- termination errors
     wk-coe-helper : ∀ {X ρ} → into-set-ty (wk {A = B} A) ≡ X
@@ -179,19 +179,17 @@ module Elim {ℓ₁ ℓ₂ ℓ₃} (𝕄 : Motive ℓ₁ ℓ₂ ℓ₃) where
   elim-ty 𝕞 (A ⇒ B) = 𝕞 ._⇒ᴹ_ (elim-ty 𝕞 A) (elim-ty 𝕞 B)
 
   coe-methods-tm : 𝕞₁ ≡ 𝕞₂ 
-                 → Tmᴹ (𝕞₁ ._▷ᴹ_ (elim-con 𝕞₁ Γ) (elim-ty 𝕞₁ B))
-                       (elim-ty 𝕞₁ (wk A)) t 
-                 → Tmᴹ (𝕞₂ ._▷ᴹ_ (elim-con 𝕞₂ Γ) (elim-ty 𝕞₂ B)) 
-                       (elim-ty 𝕞₂ (wk A)) t
+                 → Tmᴹ (elim-con 𝕞₁ Γ) (elim-ty 𝕞₁ A) t 
+                 → Tmᴹ (elim-con 𝕞₂ Γ) (elim-ty 𝕞₂ A) t
   coe-methods-tm refl x = x
 
   elim-tm 𝕞 (vz {Γ = Γ} {A = A}) 
     = coe-methods-tm (𝕞-ext 𝕞) (𝕞 .vzᴹ {Γᴱ = elim-con (𝕞 .self) Γ , refl} 
-                                       {Aᴱ = elim-ty (𝕞 .self) A , refl})
+                                       {Aᴱ = elim-ty  (𝕞 .self) A , refl})
   elim-tm 𝕞 (vs {Γ = Γ} {A = A} {B = B} t) 
     = coe-methods-tm (𝕞-ext 𝕞) (𝕞 .vsᴹ {Γᴱ = elim-con (𝕞 .self) Γ , refl}
-                                       {Aᴱ = elim-ty (𝕞 .self) A , refl}
-                                       {Bᴱ = elim-ty (𝕞 .self) B , refl}
+                                       {Aᴱ = elim-ty  (𝕞 .self) A , refl}
+                                       {Bᴱ = elim-ty  (𝕞 .self) B , refl}
                                        (elim-tm (𝕞 .self) t))
 
 -- Desired behaviour for 'elim-ty ... (wk A)'
@@ -224,9 +222,9 @@ module WithElim where
   -- Version of 'wk-coe-helper' that takes a '≅' just in case that assists 
   -- with termination
   wk-coe-helper≅ : ∀ {B : Ty Γ} 
-                    {X : set-𝕞 .methods ._▷ᴹ_ (elim-con set-𝕄 set-𝕞 Γ) 
-                                              (elim-ty set-𝕄 set-𝕞 B) → Set}
-                    {ρ} 
+                     {X : set-𝕞 .methods ._▷ᴹ_ (elim-con set-𝕄 set-𝕞 Γ) 
+                                               (elim-ty  set-𝕄 set-𝕞 B) → Set}
+                     {ρ} 
                 → elim-ty set-𝕄 set-𝕞 (wk {A = B} A) ≅ X
                 → X ρ → elim-ty set-𝕄 set-𝕞 (wk {A = B} A) ρ
   wk-coe-helper≅ refl x = x
@@ -247,7 +245,6 @@ module WithElim where
     = λ ρ → large-elim (tᴹ ρ)
   set-𝕞 .methods ._⇒ᴹ_ Aᴹ Bᴹ 
     = λ ρ → Aᴹ ρ → Bᴹ ρ
-
   
   set-𝕞 .methods .vzᴹ {A = A} (ρ , t) 
     = wk-coe-helper {A = A} (≅-to-≡ (wk-ty {B = A} {A = A})) t
@@ -271,7 +268,7 @@ module WithElim where
   wk-ty-𝕞 .methods .self = wk-ty-𝕞
   wk-ty-𝕞 .eq            = refl
 
-  wk-ty-𝕞 .methods .•ᴹ       = tt
+  wk-ty-𝕞 .methods .•ᴹ         = tt
   wk-ty-𝕞 .methods ._▷ᴹ_ Γᴹ Aᴹ = tt
 
   wk-ty-𝕞 .methods .Uᴹ         B = refl
@@ -281,3 +278,110 @@ module WithElim where
 
   wk-ty-𝕞 .methods .vzᴹ    = tt
   wk-ty-𝕞 .methods .vsᴹ tᴹ = tt
+
+  test : elim-tm set-𝕄 set-𝕞 (vs  {Γ = ((• ▷ U) ▷ U) ▷ U} {B = U} (vs vz)) 
+       ≡ (λ (((_ , t) , _) , _) → t)
+  test = refl
+
+
+module StandardElim {ℓ₁ ℓ₂ ℓ₃} (𝕄 : Motive ℓ₁ ℓ₂ ℓ₃) where
+  open Motive 𝕄
+
+  variable
+    Γᴹ Δᴹ Θᴹ Ξᴹ : Conᴹ Γ
+    Aᴹ Bᴹ Cᴹ Dᴹ : Tyᴹ Γᴹ A
+    tᴹ uᴹ vᴹ    : Tmᴹ Γᴹ Aᴹ t
+  
+  record Methods : Set (ℓ₁ ⊔ ℓ₂ ⊔ ℓ₃) where
+    field
+      •ᴹ   : Conᴹ •
+      _▷ᴹ_ : ∀ Γᴹ → Tyᴹ Γᴹ A → Conᴹ (Γ ▷ A)
+
+      Uᴹ   : Tyᴹ Γᴹ U
+      Elᴹ  : Tmᴹ Γᴹ Uᴹ t → Tyᴹ Γᴹ (El t)
+      _⇒ᴹ_ : Tyᴹ Γᴹ A → Tyᴹ Γᴹ B → Tyᴹ Γᴹ (A ⇒ B)
+
+      wkᴹ  : Tyᴹ Γᴹ A → Tyᴹ (Γᴹ ▷ᴹ Bᴹ) (wk A)
+
+      vzᴹ  : Tmᴹ (Γᴹ ▷ᴹ Aᴹ) (wkᴹ {Bᴹ = Aᴹ} Aᴹ) vz
+      vsᴹ  : Tmᴹ Γᴹ Aᴹ t  → Tmᴹ (Γᴹ ▷ᴹ Bᴹ) (wkᴹ {Bᴹ = Bᴹ} Aᴹ) (vs t)
+
+      wkUᴹ  : wkᴹ {Bᴹ = Bᴹ} Uᴹ ≡ Uᴹ
+      wkElᴹ : wkᴹ {Bᴹ = Bᴹ} (Elᴹ tᴹ)
+            ≡ Elᴹ (subst (λ Aᴹ → Tmᴹ _ Aᴹ (vs t)) wkUᴹ (vsᴹ tᴹ))
+      wk⇒ᴹ  : wkᴹ {Bᴹ = Cᴹ} (Aᴹ ⇒ᴹ Bᴹ) ≡ wkᴹ Aᴹ ⇒ᴹ wkᴹ Bᴹ
+
+  module ElimMethods (𝕞 : Methods) where
+    open Methods 𝕞
+
+    elim-con : ∀ Γ → Conᴹ Γ
+    elim-ty  : ∀ A → Tyᴹ  (elim-con Γ) A
+    elim-tm  : ∀ t → Tmᴹ  (elim-con Γ) (elim-ty A) t
+
+    elim-con •       = •ᴹ
+    elim-con (Γ ▷ A) = elim-con Γ ▷ᴹ elim-ty A
+    
+    elim-ty U       = Uᴹ
+    elim-ty (El t)  = Elᴹ (elim-tm t)
+    elim-ty (A ⇒ B) = elim-ty A ⇒ᴹ elim-ty B
+
+    coe-wk-tm : ∀ {wkAᴹ} → wkAᴹ ≡ elim-ty (wk A)
+              → Tmᴹ (elim-con Γ ▷ᴹ elim-ty B) wkAᴹ t
+              → Tmᴹ (elim-con Γ ▷ᴹ elim-ty B) (elim-ty (wk A)) t
+    coe-wk-tm refl tᴹ = tᴹ
+
+    wk-ty : wkᴹ (elim-ty A) ≡ elim-ty (wk {A = B} A)
+
+    elim-tm vz     = coe-wk-tm wk-ty vzᴹ
+    elim-tm (vs t) = coe-wk-tm wk-ty (vsᴹ (elim-tm t))
+
+    wk-El : ∀ {wkElᴹ coe-fn p}
+          → wkElᴹ  ≡ Elᴹ (subst (λ Aᴹ → Tmᴹ _ Aᴹ t) p tᴹ)
+          → coe-fn ≡ subst (λ Aᴹ → Tmᴹ _ Aᴹ t) p
+          → wkElᴹ  ≡ Elᴹ (coe-fn tᴹ)
+    wk-El refl refl = refl
+
+    wk-⇒ : ∀ {wkAᴹ wkBᴹ wkABᴹ} → wkABᴹ ≡ wkAᴹ ⇒ᴹ wkBᴹ 
+         → wkAᴹ ≡ elim-ty (wk {A = C} A) → wkBᴹ ≡ elim-ty (wk B)
+         → wkABᴹ ≡ elim-ty (wk A) ⇒ᴹ elim-ty (wk B)
+    wk-⇒ refl refl refl = refl
+
+    coe-wk-tm-subst : ∀ {wkAᴹ} (p : wkAᴹ ≡ elim-ty (wk {Γ = Γ} A)) 
+                    → coe-wk-tm p ≡ subst (λ Aᴹ → Tmᴹ _ Aᴹ (vs {B = B} t)) p
+    coe-wk-tm-subst refl = refl
+
+    wk-ty {A = U}     = wkUᴹ
+    wk-ty {A = El t}  = wk-El wkElᴹ (coe-wk-tm-subst wkUᴹ)
+    wk-ty {A = A ⇒ B} = wk-⇒ wk⇒ᴹ (wk-ty {A = A}) (wk-ty {A = B})
+  open ElimMethods public
+
+-- It turns out that with the standard 'wkᴹ' eliminator, interpreting into 'Set'
+-- comes out beautifully, with no need for coercions or extra lemmas.
+-- I think this very much puts in doubt the motivation for the leaner 'Methods'
+-- record - 'wkᴹ' as a case does provide useful flexibility
+module WithStandardElim where
+  open StandardElim
+  open Motive
+  open Methods
+  
+  set-𝕄 : Motive 1ℓ 1ℓ 0ℓ
+  set-𝕄 .Conᴹ Γ       = Set
+  set-𝕄 .Tyᴹ  Γᴹ A    = Γᴹ → Set
+  set-𝕄 .Tmᴹ  Γᴹ Aᴹ t = ∀ ρ → Aᴹ ρ
+
+  set-𝕞 : Methods set-𝕄
+  set-𝕞 .•ᴹ         = ⊤
+  set-𝕞 ._▷ᴹ_ Γᴹ Aᴹ = ∃ λ ρ → Aᴹ ρ
+
+  set-𝕞 .Uᴹ   _       = Bool
+  set-𝕞 .Elᴹ  tᴹ ρ    = large-elim (tᴹ ρ)
+  set-𝕞 ._⇒ᴹ_ Aᴹ Bᴹ ρ = Aᴹ ρ → Bᴹ ρ
+  
+  set-𝕞 .wkᴹ Aᴹ (ρ , _) = Aᴹ ρ
+
+  set-𝕞 .vzᴹ    (ρ , t) = t
+  set-𝕞 .vsᴹ tᴹ (ρ , _) = tᴹ ρ
+
+  set-𝕞 .wkUᴹ  = refl
+  set-𝕞 .wkElᴹ = refl
+  set-𝕞 .wk⇒ᴹ  = refl
